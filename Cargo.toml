@@ -1,18 +1,17 @@
 [package]
-name = "basic-http-server"
+name = "httpb"
 version = "0.8.1"
-authors = ["Brian Anderson <andersrb@gmail.com>"]
+authors = ["asins <asinsimple@gmail.com>"]
 license = "MIT/Apache-2.0"
-description = "A simple static HTTP file server, for learning and local development"
-homepage = "https://github.com/brson/basic-http-server"
-repository = "https://github.com/brson/basic-http-server"
+description = "简单的静态HTTP文件服务器，用于学习和本地开发"
+homepage = "https://github.com/asins/httpb.git"
+repository = "https://github.com/asins/httpb.git"
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bytes = "0.4.12"
 clap = "2.33.0"
-comrak = "0.6.2"
 derive_more = "0.15.0"
 env_logger = "0.6.2"
 futures-preview = "0.3.0-alpha.19"
@@ -27,3 +26,9 @@ serde = { version = "1.0.102", features = ["derive"] }
 tokio = "0.2.0-alpha.6"
 tokio-fs = "0.2.0-alpha.6"
 structopt = "0.2.18"
+chrono = "0.4.31"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

@@ -4,7 +4,6 @@
 //! but could still be a useful read.
 
 use super::{Config, HtmlCfg};
-use comrak::ComrakOptions;
 use futures::{future, StreamExt};
 use http::{Request, Response, StatusCode};
 use hyper::{header, Body};
@@ -31,13 +30,13 @@ pub async fn serve(
         return resp;
     }
 
-    let path = super::local_path_for_request(&req.uri(), &config.root_dir)?;
-    let file_ext = path.extension().and_then(OsStr::to_str).unwrap_or("");
+    let path = super::local_path_for_request(req.uri(), &config.root_dir)?;
+    // let file_ext = path.extension().and_then(OsStr::to_str).unwrap_or("");
 
-    if file_ext == "md" {
-        trace!("using markdown extension");
-        return Ok(md_path_to_html(&path).await?);
-    }
+    // if file_ext == "md" {
+    //     trace!("using markdown extension");
+    //     return Ok(md_path_to_html(&path).await?);
+    // }
 
     match resp {
         Ok(mut resp) => {
@@ -63,35 +62,6 @@ pub async fn serve(
     }
 }
 
-/// Load a markdown file, render to HTML, and return the response.
-async fn md_path_to_html(path: &Path) -> Result<Response<Body>> {
-    // Render Markdown like GitHub
-    let mut options = ComrakOptions::default();
-    options.ext_autolink = true;
-    options.ext_header_ids = None;
-    options.ext_table = true;
-    options.ext_strikethrough = true;
-    options.ext_tagfilter = true;
-    options.ext_tasklist = true;
-    options.github_pre_lang = true;
-    options.ext_header_ids = Some("user-content-".to_string());
-
-    let buf = tokio::fs::read(path).await?;
-    let s = String::from_utf8(buf).map_err(|_| Error::MarkdownUtf8)?;
-    let html = comrak::markdown_to_html(&s, &options);
-    let cfg = HtmlCfg {
-        title: String::new(),
-        body: html,
-    };
-    let html = super::render_html(cfg)?;
-
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_LENGTH, html.len() as u64)
-        .header(header::CONTENT_TYPE, mime::TEXT_HTML.as_ref())
-        .body(Body::from(html))
-        .map_err(Error::from)
-}
 
 fn maybe_convert_mime_type_to_text(req: &Request<Body>, resp: &mut Response<Body>) {
     let path = req.uri().path();
@@ -120,7 +90,7 @@ fn maybe_convert_mime_type_to_text(req: &Request<Body>, resp: &mut Response<Body
 }
 
 #[rustfmt::skip]
-static TEXT_EXTENSIONS: &[&'static str] = &[
+static TEXT_EXTENSIONS: &[&str] = &[
     "c",
     "cc",
     "cpp",
@@ -141,7 +111,7 @@ static TEXT_EXTENSIONS: &[&'static str] = &[
 ];
 
 #[rustfmt::skip]
-static TEXT_FILES: &[&'static str] = &[
+static TEXT_FILES: &[&str] = &[
     ".gitattributes",
     ".gitignore",
     ".mailmap",
@@ -162,7 +132,7 @@ static TEXT_FILES: &[&'static str] = &[
 async fn maybe_list_dir(root_dir: &Path, path: &Path) -> Result<Option<Response<Body>>> {
     let meta = tokio::fs::metadata(path).await?;
     if meta.is_dir() {
-        Ok(Some(list_dir(&root_dir, path).await?))
+        Ok(Some(list_dir(root_dir, path).await?))
     } else {
         Ok(None)
     }
@@ -185,7 +155,7 @@ async fn list_dir(root_dir: &Path, path: &Path) -> Result<Response<Body>> {
     paths.sort();
     let paths = Some(up_dir).into_iter().chain(paths);
     let paths: Vec<_> = paths.collect();
-    let html = make_dir_list_body(&root_dir, &paths)?;
+    let html = make_dir_list_body(root_dir, &paths)?;
     let resp = super::html_str_to_response(html, StatusCode::OK)?;
     Ok(resp)
 }
@@ -217,7 +187,7 @@ fn make_dir_list_body(root_dir: &Path, paths: &[PathBuf]) -> Result<String> {
                         &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
                     const PATH_SET: &AsciiSet =
                         &FRAGMENT_SET.add(b'#').add(b'?').add(b'{').add(b'}');
-                    let full_url = utf8_percent_encode(full_url, &PATH_SET);
+                    let full_url = utf8_percent_encode(full_url, PATH_SET);
 
                     // TODO: Make this a relative URL
                     writeln!(buf, "<div><a href='/{}'>{}</a></div>", full_url, file_name)

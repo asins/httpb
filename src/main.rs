@@ -4,6 +4,7 @@
 extern crate derive_more;
 
 use bytes::BytesMut;
+use chrono::Local;
 use env_logger::{Builder, Env};
 use futures::future;
 use futures::stream::StreamExt;
@@ -49,9 +50,9 @@ fn log_error_chain(mut e: &dyn StdError) {
 
 /// The configuration object, parsed from command line options.
 #[derive(Clone, StructOpt)]
-#[structopt(about = "A basic HTTP file server")]
+#[structopt(about = "简单的静态HTTP文件服务器")]
 pub struct Config {
-    /// The IP:PORT combination.
+    /// 设置 IP:PORT 的组合字符
     #[structopt(
         name = "ADDR",
         short = "a",
@@ -61,11 +62,11 @@ pub struct Config {
     )]
     addr: SocketAddr,
 
-    /// The root directory for serving files.
+    /// 设置文件服务器根目录
     #[structopt(name = "ROOT", parse(from_os_str), default_value = ".")]
     root_dir: PathBuf,
 
-    /// Enable developer extensions.
+    /// 启用开发人员扩展
     #[structopt(short = "x")]
     use_extensions: bool,
 }
@@ -73,7 +74,7 @@ pub struct Config {
 fn run() -> Result<()> {
     // Initialize logging, and log the "info" level for this crate only, unless
     // the environment contains `RUST_LOG`.
-    let env = Env::new().default_filter_or("basic_http_server=info");
+    let env = Env::new().default_filter_or("debug=info");
     Builder::from_env(env)
         .default_format_module_path(false)
         .default_format_timestamp(false)
@@ -85,10 +86,10 @@ fn run() -> Result<()> {
     let config = Config::from_args();
 
     // Display the configuration to be helpful
-    info!("basic-http-server {}", env!("CARGO_PKG_VERSION"));
-    info!("addr: http://{}", config.addr);
-    info!("root dir: {}", config.root_dir.display());
-    info!("extensions: {}", config.use_extensions);
+    println!("httpb {}", env!("CARGO_PKG_VERSION"));
+    println!("addr: http://{}", config.addr);
+    println!("root dir: {}", config.root_dir.display());
+    println!("extensions: {}\n------------------\n", config.use_extensions);
 
     // Create the MakeService object that creates a new Hyper service for every
     // connection. Both these closures need to return a Future of Result, and we
@@ -124,11 +125,24 @@ fn run() -> Result<()> {
 /// Errors are turned into an appropriate HTTP error response, and never
 /// propagated upward for hyper to deal with.
 async fn serve(config: Config, req: Request<Body>) -> Response<Body> {
+    let method = req.method().to_string();
+    let uri = req.uri().to_string();
     // Serve the requested file.
     let resp = serve_or_error(config, req).await;
 
     // Transform internal errors to error responses.
     let resp = transform_error(resp);
+
+    let date_str = Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+
+    // GET /index?aaa
+    println!(
+        "[{}] {} {} {}",
+        date_str,
+        method,
+        resp.status().as_str(),
+        uri
+    );
 
     resp
 }
@@ -146,25 +160,25 @@ async fn serve_or_error(config: Config, req: Request<Body>) -> Result<Response<B
     let resp = serve_file(&req, &config.root_dir).await;
 
     // Give developer extensions an opportunity to post-process the request/response pair.
-    let resp = ext::serve(config, req, resp).await;
-
-    resp
+    ext::serve(config, req, resp).await
 }
 
 /// Serve static files from a root directory.
-async fn serve_file(req: &Request<Body>, root_dir: &PathBuf) -> Result<Response<Body>> {
+async fn serve_file(req: &Request<Body>, root_dir: &Path) -> Result<Response<Body>> {
     // First, try to do a redirect. If that doesn't happen, then find the path
     // to the static file we want to serve - which may be `index.html` for
     // directories - and send a response containing that file.
-    let maybe_redir_resp = try_dir_redirect(req, &root_dir)?;
+    let maybe_redir_resp = try_dir_redirect(req, root_dir)?;
 
     if let Some(redir_resp) = maybe_redir_resp {
         return Ok(redir_resp);
     }
 
-    let path = local_path_with_maybe_index(req.uri(), &root_dir)?;
+    let path = local_path_with_maybe_index(req.uri(), root_dir)?;
 
-    Ok(respond_with_file(path).await?)
+    let resp = respond_with_file(path).await?;
+
+    Ok(resp)
 }
 
 /// Try to do a 302 redirect for directories.
@@ -182,8 +196,8 @@ async fn serve_file(req: &Request<Body>, root_dir: &PathBuf) -> Result<Response<
 /// the case for URL `docs/`.
 ///
 /// This seems to match the behavior of other static web servers.
-fn try_dir_redirect(req: &Request<Body>, root_dir: &PathBuf) -> Result<Option<Response<Body>>> {
-    if req.uri().path().ends_with("/") {
+fn try_dir_redirect(req: &Request<Body>, root_dir: &Path) -> Result<Option<Response<Body>>> {
+    if req.uri().path().ends_with('/') {
         return Ok(None);
     }
 
@@ -196,9 +210,9 @@ fn try_dir_redirect(req: &Request<Body>, root_dir: &PathBuf) -> Result<Option<Re
     }
 
     let mut new_loc = req.uri().path().to_string();
-    new_loc.push_str("/");
+    new_loc.push('/');
     if let Some(query) = req.uri().query() {
-        new_loc.push_str("?");
+        new_loc.push('?');
         new_loc.push_str(query);
     }
 
@@ -279,7 +293,7 @@ fn local_path_for_request(uri: &Uri, root_dir: &Path) -> Result<PathBuf> {
     let request_path = &request_path[0..end];
 
     // Convert %-encoding to actual values
-    let decoded = percent_decode_str(&request_path);
+    let decoded = percent_decode_str(request_path);
     let request_path = if let Ok(p) = decoded.decode_utf8() {
         p
     } else {
@@ -290,7 +304,9 @@ fn local_path_for_request(uri: &Uri, root_dir: &Path) -> Result<PathBuf> {
     // Append the requested path to the root directory
     let mut path = root_dir.to_owned();
     if request_path.starts_with('/') {
-        path.push(&request_path[1..]);
+        if let Some(str) = request_path.strip_prefix('/') {
+            path.push(str);
+        }
     } else {
         warn!("found non-absolute path {}", request_path);
         return Err(Error::UriNotAbsolute);

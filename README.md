@@ -75,15 +75,15 @@ USAGE:
         basic-http-server [FLAGS] [OPTIONS] [ARGS]
 
 FLAGS:
-    -x               Enable developer extensions
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+    -x               启用开发人员扩展
+    -h, --help       打印帮助信息
+    -V, --version    打印版本信息
 
 OPTIONS:
-    -a, --addr <ADDR>    Sets the IP:PORT combination (default "127.0.0.1:4000")
+    -a, --addr <ADDR>    设置 IP:PORT 的组合字符 (默认: "127.0.0.1:4000")
 
 ARGS:
-    ROOT    Sets the root directory (default ".")
+    ROOT    设置文件服务器根目录 (默认: ".")
 
 ```
 
